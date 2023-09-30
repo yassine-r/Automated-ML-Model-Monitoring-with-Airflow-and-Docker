@@ -1,6 +1,7 @@
-PATH_DIR_DATA = "../dags/data"
-PATH_DIR_MODELS = "../dags/models"
-PATH_DIR_RESULTS = "../dags/results"
+PATH_DIR_DATA = "dags/data"
+PATH_DIR_MODELS = "dags/models"
+PATH_DIR_RESULTS = "dags/results"
+PATH_TO_CREDENTIALS = "dags/Creds.json"
 
 IDENTIFIERS = ['loan_id', 'customer_id']
 TARGET = 'loan_status'

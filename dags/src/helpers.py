@@ -3,9 +3,16 @@ import os
 import json
 import pickle
 import pandas as pd
-import logging
-
+import datetime
+import glob
+from sqlalchemy import create_engine
+from sqlalchemy.sql import text
 import config
+import queries
+
+credentials = json.load(open(config.PATH_TO_CREDENTIALS, 'r'))
+engine = create_engine(f"postgresql://{credentials['user']}:{credentials['password']}@{credentials['host']}:{credentials['port']}/{credentials['database']}")
+
 
 def generate_uuid()->str:
     """
@@ -14,6 +21,15 @@ def generate_uuid()->str:
     """
     
     return str(uuid.uuid4()).replace('-','')
+
+def get_model_type(job_id:str) -> str:
+    """
+    Get the type of a model.
+    :param job_id: str
+    :return: str
+    """
+    report_filename = os.path.join(config.PATH_DIR_MODELS, f"{job_id}_train_report.json")
+    return json.load(open(report_filename, "r"))["final_model"]
 
 
 def save_dataset(df: pd.DataFrame, path: str) -> None:
@@ -28,7 +44,6 @@ def save_dataset(df: pd.DataFrame, path: str) -> None:
         None
     """
     df.to_csv(path, index=False)
-    logging.info("Dataset saved to: %s", path)
     print(f"[INFO] Dataset saved to {path}")
 
 def load_dataset(path: str) -> pd.DataFrame:
@@ -41,9 +56,40 @@ def load_dataset(path: str) -> pd.DataFrame:
     Returns:
         The loaded DataFrame.
     """
-    logging.info("Dataset loaded %s", path)
     return pd.read_csv(path)
 
+def locate_raw_data_filename(job_id:str) -> str:
+    """
+    Locate the raw data file.
+    :param job_id: str
+    :return: str
+    """
+
+    files = glob(os.path.join(config.PATH_DIR_DATA, "collected", f"{job_id}_*.csv"))
+    if len(files) == 0:
+        print(f"[WARNING] No raw data file found for job_id : {job_id}.")
+        return None
+    return files[0]
+
+def locate_preprocessed_filenames(job_id:str) -> dict:
+    """
+    Locate the preprocessed data files.
+    :param job_id: str
+    :return: dict
+    """
+    files = sorted(glob(os.path.join(config.PATH_DIR_DATA, "preprocessed", f"{job_id}_*.csv")))
+    if len(files) == 0:
+        raise(Exception(f"No preprocessed data file found for job_id : {job_id}."))
+    elif len(files) > 2:
+        raise(Exception(f"More than one preprocessed data file found for job_id : {job_id} ->\n{files}"))
+    elif len(files) == 1:
+        training_filename = None
+        inference_filename = list(filter(lambda x: "inference" in x, files))[0]
+        return training_filename, inference_filename
+    else:
+        training_filename = list(filter(lambda x: "training" in x, files))[0]
+        inference_filename = list(filter(lambda x: "inference" in x, files))[0]
+        return training_filename, inference_filename
 
 def save_model_as_pickle(model, model_name, directory=None) -> None:
     """
@@ -66,7 +112,6 @@ def save_model_as_pickle(model, model_name, directory=None) -> None:
         pickle.dump(model, f)
     
     print(f"[INFO] Model saved as pickle file: {filename}")
-    logging.info("Model saved as pickle file: %s", filename)
     
     
 def load_model_from_pickle(model_name: str):
@@ -80,7 +125,6 @@ def load_model_from_pickle(model_name: str):
         The loaded model object.
     """
     with open(os.path.join(config.PATH_DIR_MODELS, model_name + ".pkl"), "rb") as f:
-        logging.info("Model loaded: %s", model_name)
         print(f"[INFO] Model loaded: {model_name}")
         return pickle.load(f)
 
@@ -107,7 +151,6 @@ def save_model_as_json(model:dict, model_name:str, directory:str=None):
     with open(filename, "w") as f:
         json.dump(model, f)
         
-    logging.info("Model saved as json file: %s", filename)
     print("[INFO] Model saved as json file:", filename)
 
 def load_model_from_json(model_name: str) -> dict:
@@ -121,7 +164,6 @@ def load_model_from_json(model_name: str) -> dict:
         dict.
     """
     with open(os.path.join(config.PATH_DIR_MODELS, model_name+".json"), "r") as f:
-        logging.info("Model loaded: %s", model_name)
         print(f"[INFO] Model loaded: {model_name}")
         return json.load(f)
     
@@ -150,7 +192,6 @@ def check_dataset_sanity(df: pd.DataFrame) -> bool:
         return True
     else:
         # If there are null values, raise an exception with the column names
-        logging.exception("There are null values in the training dataset: %s", null_columns)
         raise Exception(f"There are null values in the training dataset: {null_columns}")
 
 
@@ -179,7 +220,6 @@ def check_dataset_sanity(df: pd.DataFrame) -> bool:
         return True
     else:
         # If there are null values, raise an exception with the column names
-        logging.exception("There are null values in the training dataset: %s", null_columns)
         raise Exception(f"There are null values in the training dataset: {null_columns}")
 
 
@@ -207,12 +247,51 @@ def persist_deploy_report(job_id: str, model_name: str) -> None:
     json.dump(report, open(os.path.join(config.PATH_DIR_MODELS, "deploy_report.json"), "w"))
     
     # Print the path where the deployment report is saved
-    logging.info("Deployment report saved as : %s", os.path.join(config.PATH_DIR_MODELS, "deploy_report.json"))
     print(f'[INFO] Deployment report saved as {os.path.join(config.PATH_DIR_MODELS, "deploy_report.json")}')
 
 
 
+def create_table_ml_job():
+    """
+    Create a table in the database.
+    :return: None
+    """
+    engine.execute(text(queries.CREATE_TABLE_ML_JOB).execution_options(autocommit=True))
+    print(f"[INFO] Table {credentials['database']}.mljob ready!")
 
+def create_table_mlreport():
+    raise(NotImplementedError)
 
-
-
+def get_latest_deployed_job_id(status:str="pass") -> str:
+    """
+    Get the latest deployed job id by looking for the latest of all jobs with stage `deploy` and the specified status.
+    :param status: str
+    :return: str
+    """
+    try:
+        return json.load(open(os.path.join(config.PATH_DIR_MODELS, "deploy_report.json"))).get("job_id")
+    except Exception as e:
+        assert status in config.STATUS, f"[ERROR] Status `{status}` is not valid! Choose from {config.STATUS}"
+        query = text(queries.GET_LATEST_DEPLOYED_JOB_ID.format(status=status))
+        r = pd.read_sql(query, engine)
+        if r.shape[0] == 0:
+            return None
+        return str(r['job_id'].values[0])
+    
+def log_activity(job_id:str, job_type:str, stage:str, status:str, message:str, job_date:datetime.date=None):
+    """
+    Logs the activity of a job.
+    :param job_id: str
+    :param job_type: str
+    :param stage: str
+    :param status: str
+    :param message: str
+    :param job_date: datetime.date
+    :return: None
+    """
+    assert stage in config.STAGES, f"[ERROR] Stage `{stage}` is not valid! Choose from {config.STAGES}"
+    assert status in config.STATUS, f"[ERROR] Status `{status}` is not valid! Choose from {config.STATUS}"
+    assert job_type in config.JOB_TYPES, f"[ERROR] Job type `{job_type}` is not valid! Choose from {config.JOB_TYPES}"
+    message = message.replace("'", "\\")
+    engine.execute(text(queries.LOG_ACTIVITY.format(job_id=str(job_id), job_type=job_type, stage=str(stage), status=str(status), message=message, job_date=job_date)).execution_options(autocommit=True))
+    print(f"[INFO] Job {job_id} logged as {job_type}::{stage}::{status}::{message}")

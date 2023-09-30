@@ -2,7 +2,6 @@ import os
 import re
 import pandas as pd
 import numpy as np
-import logging
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
@@ -64,7 +63,6 @@ def impute_missing_values(df: pd.DataFrame, method: str = "basic", mode: str = N
         
         for col in df.columns:
             print("[INFO] Treating missing values in column:", col)
-            logging.info("Treating missing values in column: %s", col)
             
             model["imputes"][col] = dict()
             
@@ -78,11 +76,9 @@ def impute_missing_values(df: pd.DataFrame, method: str = "basic", mode: str = N
                 elif col in ["loan_id", "customer_id", "loan_status"] + exc_vars:
                     pass
                 else:
-                    logging.error("%s is not a valid variable", col)
                     raise ValueError(f"[ERROR] {col} is not a valid variable")
             
             if method == "advanced":
-                logging.exception("advanced method is not implemented")
                 raise NotImplementedError
         
         helpers.save_model_as_pickle(model, f"{job_id}_missing_values_model")
@@ -104,11 +100,9 @@ def impute_missing_values(df: pd.DataFrame, method: str = "basic", mode: str = N
                 elif col in ["loan_id", "customer_id", "loan_status"] + exc_vars:
                     pass
                 else:
-                    logging.error("%s is not a valid variable", col)
                     raise ValueError(f"[ERROR] {col} is not a valid variable. Pre-trained variables: {list(model['imputes'].keys())}")
         
         if method == "advanced":
-            logging.exception("advanced method is not implemented")
             raise NotImplementedError
     
     return df
@@ -270,11 +264,9 @@ def purpose_to_int(x:pd.Series, mode:str, method:str=None, model:str=None, job_i
     :return:pd.Series
     """
     print("[INFO] Converting purpose to int using method:", method)
-    logging.info("Converting purpose to int using method: %s", method)
     
     if model==None:
         print("[INFO] No model for purpose-to-int conversion provided. Training a new model first...")
-        logging.info("No model for purpose-to-int conversion provided. Training a new model first...")
         mode = "training"
     if mode=="training":
         model = train_purpose_to_int_model(x, method, job_id=job_id)
@@ -435,7 +427,6 @@ def rescale_data(df:pd.DataFrame, method:str='standardize', mode:str='training',
             try:
                 df[col].astype(float)
             except:
-                logging.exception("Column skipped: %s", col)
                 print("[DEBUG] Column skipped:", col)
         df[list(map(lambda x: f"{method}_{x}", columns))] = scaler.transform(df[columns])
         return df
@@ -460,7 +451,6 @@ def split_train_test(df:pd.DataFrame, test_size:float, method:str='time based'):
 
         return train_df, test_df
     
-    logging.error("%s is not a valid method (time based, random)", method)
     raise(ValueError(f"{method} is not a valid method (time based, random)"))
 
 def preprocess_data(df:pd.DataFrame, mode:str, job_id:str=None, rescale=False, ref_job_id:str=None) -> pd.DataFrame:

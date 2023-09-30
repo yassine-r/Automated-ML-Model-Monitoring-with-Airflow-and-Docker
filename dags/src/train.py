@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import logging
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
@@ -132,7 +131,6 @@ def train(train_dataset_filename:str=None, test_dataset_filename:str=None, job_i
     models = dict()
     for cl, name in [(rf, "rf"), (gb, "gb")]:
         print("[INFO] Training model:", name)
-        logging.info("Training model:%s", name)
         cl.fit(X, Y)
         t_pred = cl.predict(X)
         v_pred = cl.predict(vdf[predictors])
