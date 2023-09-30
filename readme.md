@@ -1,4 +1,4 @@
-# Loan Prediction
+# Automated ML Model Monitoring with Airflow and Docker
 
 ### Note: This project requires the data to be injected in the folder dags/data/source.
 Data is accessible within the "dags > data > source" directory in the format of "year_month_day.csv." The pipeline automatically selects the most recently added file for comparison and drift checks.
@@ -22,13 +22,17 @@ Here we will simply setup our environment using docker.
 This will take a couple of minutes to boot up all containers. To check if all containers are running properly, you can run `docker ps --all`. You should see a list of all containers in `healthy` status
 
 ## 3. How to reset environments
-Delete all files under the following subdirectories. In case subdirectories do not exist (due to .gitignore) please create them
+1. Delete all files under the following subdirectories. In case subdirectories do not exist (due to .gitignore) please create them
 
 -  `dags/data/source/*`
 -  `dags/data/collected`
 -  `dags/data/preprocessed`
 -  `dags/models`
 -  `dags/results`
+
+2. Truncate the `mljob` table
+- `truncate mljob;`
+  
 # Monitoring Machine Learning Pipeline
 
 ## 1. Traditional machine learning model training pipeline
